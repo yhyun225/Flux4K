@@ -16,7 +16,7 @@ mkdir /dinov3_gan/dinov3_weights
 
 (4) [Image-GS](https://github.com/NYU-ICL/image-gs)
 ```bash
-cd gmod
+cd gsplat
 pip install -e ".[dev]" --no-build-isolation
 ```
 

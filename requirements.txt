@@ -1,0 +1,5 @@
+accelerate
+diffusers
+einops
+omegaconf
+opencv-python

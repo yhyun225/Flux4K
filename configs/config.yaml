@@ -1,0 +1,61 @@
+output_dir: output
+
+seed: 0
+# pretrained_model_name_or_path: black-forest-labs/FLUX.1-Krea-dev
+pretrained_model_name_or_path: black-forest-labs/FLUX.1-dev
+
+# log & save & checkpoint
+checkpoint_step: 5000
+visualization_step:  2000
+log_step: 10
+
+# training
+batch_size: ~
+batch_size_per_gpu: 1
+gradient_accumulation_steps: 1
+
+max_train_steps: 100000
+
+mixed_precision: bf16
+allow_tf32: True
+
+max_grad_norm: 1.0
+
+# rendering
+render_h: 1024  # 4096
+render_w: 1024  # 4096
+block_h: 16
+block_w: 16
+
+# gaussian decoder
+gaussian_decoder:
+  train_size: [1024, 1024]
+  split_dim: [2, 1, 2, 3]
+  num_gaussians_per_pixel: 1
+
+# optimizer
+use_8bit_adam: False
+learning_rate: 3e-04
+adam_betas: [0.9, 0.999]
+adam_weight_decay: 0.
+adam_epsilon: 1e-08
+
+# loss
+loss_name: l1
+lambda_l1: 0.5
+lambda_dv3d: 1.0
+lambda_gan: 0.5
+
+# dataset
+dataset:
+  data_root: /data1/yhyun225/Diffusion4K
+  size: [4096, 4096]
+  center_crop: False
+
+# dataloader
+dataloader:
+  num_workers: 8
+  shuffle: True
+  drop_last: True
+  pin_memory: True
+  persistent_workers: True
