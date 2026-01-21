@@ -1,8 +1,8 @@
 import torch
 from einops import rearrange
 
-from gmod.gsplat.project_gaussians_2d_scale_rot import project_gaussians_2d_scale_rot
-from gmod.gsplat.rasterize_sum import rasterize_gaussians_sum
+from gsplat.gsplat.project_gaussians_2d_scale_rot import project_gaussians_2d_scale_rot
+from gsplat.gsplat.rasterize_sum import rasterize_gaussians_sum
 
 def render_image_from_gaussians(
     gaussians: dict, 

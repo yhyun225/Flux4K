@@ -7,6 +7,10 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
+import random
+
+Image.MAX_IMAGE_PIXELS = None
+
 class Diffusion4KDataset(Dataset):
     def __init__(
         self,
@@ -55,14 +59,21 @@ class Diffusion4KDataset(Dataset):
         return self.len
 
     def __getitem__(self, index):
-        data = self.dataset[index]
+        # exit_transpose() throws error on the truncated iamges
+        while True:
+            try:
+                data = self.dataset[index]
 
-        image = Image.open(os.path.join(self.data_root, data))
-        image = exif_transpose(image)
-        if not image.mode == "RGB":
-            image = image.convert("RGB")
-        
-        image_tensor = self.transforms(image)
+                image = Image.open(os.path.join(self.data_root, data))
+                image = exif_transpose(image)
+                if not image.mode == "RGB":
+                    image = image.convert("RGB")
+                
+                image_tensor = self.transforms(image)
+                break
+
+            except:
+                index = random.randint(0, self.len - 1)
 
         return {
             "image": image_tensor,

@@ -28,9 +28,6 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from diffusers import AutoencoderKL
 from diffusers.utils import is_wandb_available
 
-from gmod.gsplat.project_gaussians_2d_scale_rot import project_gaussians_2d_scale_rot
-from gmod.gsplat.rasterize_sum import rasterize_gaussians_sum
-
 from models import GaussianDecoder
 from dinov3_gan.dinov3_convnext_dists import DINOv3ConvNeXtDISTS
 from dinov3_gan.dinov3_convnext_disc import Dinov3ConvNeXtDiscriminator
@@ -125,15 +122,13 @@ def main():
 
     # 3) DINOv3-ConvNeXT (for perceptual loss)
     net_dv3d = DINOv3ConvNeXtDISTS(dinov3_convnext_size="large")
-    net_dv3d.to(device, dtype=torch.float32)
+    net_dv3d.to(device)
 
     # 4) DINOv3-ConvNeXT Discriminator (for GAN loss)
     net_disc = Dinov3ConvNeXtDiscriminator(dinov3_convnext_size="large", resolution=1024)
-    net_disc.to(device, dtype=weight_dtype)
+    net_disc.to(device)
 
     # ====================== loss ======================
-    loss_func = nn.L1Loss().to(device)
-
     lambda_l1 = config.lambda_l1
     lambda_dv3d = config.lambda_dv3d
     lambda_gan = config.lambda_gan
@@ -176,8 +171,10 @@ def main():
         eps=config.adam_epsilon,
     )
 
-    print(f"Gaussian Decoder # parpams: {sum([p.numel() for p in model.parameters() if p.requires_grad])}")
-    print(f"Deiscriminator # parpams: {sum([p.numel() for p in net_disc.parameters() if p.requires_grad])}")
+    if accelerator.is_main_process:
+        print(f"Gaussian Decoder # parpams: {sum([p.numel() for p in model.parameters() if p.requires_grad])}")
+        print(f"Deiscriminator # parpams: {sum([p.numel() for p in net_disc.parameters() if p.requires_grad])}")
+
     # ====================== compute batch size ======================
     assert config.batch_size is not None or config.batch_size_per_gpu is not None, \
         "either batch_size or batch_size_per_gpu should be specified"
@@ -245,15 +242,18 @@ def main():
     )
 
     # ====================== Train! ======================
+    # for debugging
+    torch.autograd.set_detect_anomaly(True)
+
     for epoch in range(num_train_epochs):
         for batch in data_loader:
             model.train()
 
-            with accelerator.accumulate(model):
-                image = batch["image"].to(device=device)
+            with accelerator.accumulate(*[model, net_disc]):
+                image = batch["image"].to(device=device, dtype=weight_dtype)
                 image_target = F.interpolate(
                     image, (1024, 1024), mode="bilinear", align_corners=False,
-                ).to(weight_dtype)
+                ) #.to(weight_dtype)
 
                 with torch.no_grad():
                     latents = vae.encode(image_target).latent_dist.mode()
@@ -262,16 +262,16 @@ def main():
 
                 # first gaussians
                 image_render = render_image_from_gaussians(
-                    gaussians[0], model.train_size[0], model.train_size[1],
+                    gaussians[0], 1024, 1024,
                     render_h=config.render_h, render_w=config.render_w,
                     block_h=config.block_h, block_w=config.block_w,
-                )
+                ).to(weight_dtype)
 
                 # # update gaussian decoder weights
-                loss_l1 = F.l1_loss(image_render.float(), image_target.float()) * lambda_l1
-                loss_dv3d = net_dv3d(image_render.float(), image_target.float()) * lambda_dv3d
-                loss_gan = net_disc(image_render.to(weight_dtype), for_G=True).float() * lambda_gan
-                
+                loss_l1 = F.l1_loss(image_render, image_target) * lambda_l1
+                loss_dv3d = net_dv3d(image_render, image_target) * lambda_dv3d
+                loss_gan = net_disc(image_render, for_G=True) * lambda_gan
+
                 total_loss_G = loss_l1 + loss_dv3d + loss_gan
                 accelerator.backward(total_loss_G)
                 if accelerator.sync_gradients:
@@ -283,8 +283,8 @@ def main():
 
                 # update discriminator weights
                 image_fake = image_render.detach()
-                loss_D_fake = net_disc(image_fake.to(weight_dtype), for_real=False).float() * lambda_gan
-                loss_D_real = net_disc(image_target.to(weight_dtype), for_real=True).float() * lambda_gan
+                loss_D_fake = net_disc(image_fake, for_real=False) * lambda_gan
+                loss_D_real = net_disc(image_target, for_real=True) * lambda_gan
 
                 total_loss_D = loss_D_fake + loss_D_real
                 accelerator.backward(total_loss_D)
@@ -316,12 +316,46 @@ def main():
                         
                     if global_step % config.visualization_step == 0:
                         visualization_path = f"{visualization_dir}/{global_step: 07d}"
+                        train_images_dir = os.path.join(visualization_path, "train")
+                        os.makedirs(train_images_dir, exist_ok=True)
 
                         # TODO: save image_resize & image_render
+                        for i in range(image_target.shape[0]):
+                            torchvision.utils.save_image(
+                                torch.clamp((image_render[i: i+1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"render_{i}.png")
+                            )
+                            torchvision.utils.save_image(
+                                torch.clamp((image_target[i: i+1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"target_{i}.png")
+                            )
+
+                        # TODO: rendering on 2k & 4k
+                        with torch.no_grad():
+                            image_render_2k = render_image_from_gaussians(
+                                gaussians[0], 1024, 1024,
+                                render_h=2048, render_w=2048,
+                                block_h=config.block_h, block_w=config.block_w,
+                            )
+                            torchvision.utils.save_image(
+                                torch.clamp((image_render_2k + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"render_2k_{i}.png")
+                            )
+
+                            image_render_4k = render_image_from_gaussians(
+                                gaussians[0], 1024, 1024,
+                                render_h=4096, render_w=4096,
+                                block_h=config.block_h, block_w=config.block_w
+                            )
+                            torchvision.utils.save_image(
+                                torch.clamp((image_render_4k + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"render_4k_{i}.png")
+                            )
+
                         
                     if global_step % config.log_step == 0:
                         logger.info(
-                            f"[Step: {global_step: 05d}] (GS) Total_loss: {total_loss_G.detach().item():.4f}, L1_loss: {loss_l1.detach().item():.4f}, DV3D_loss: {loss_dv3d.detach().item():.4f} " \
+                            f"[Step: {global_step: 5d}] (GS) Total_loss: {total_loss_G.detach().item():.4f}, L1_loss: {loss_l1.detach().item():.4f}, DV3D_loss: {loss_dv3d.detach().item():.4f} " \
                             f"|| (Disc) Total_loss: {total_loss_D.detach().item(): .4f}, D_fake_loss: {loss_D_fake.detach().item(): .4f}, D_real_loss: {loss_D_real.detach().item(): .4f}"
                         )
 
@@ -331,7 +365,7 @@ def main():
                     }
                     progress_bar.set_postfix(**logs)
                 
-                    accelerator.wait_for_everyone()
+                accelerator.wait_for_everyone()
             
             if global_step > config.max_train_steps:
                 break

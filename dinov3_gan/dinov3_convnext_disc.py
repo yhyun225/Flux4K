@@ -222,7 +222,7 @@ class MultiLevelConvNeXtDiscHead(nn.Module):
             layers.extend([
                 BlurPool(cur_ch, pad_type='zero'),
                 spectral_norm(nn.Conv2d(cur_ch, int(cur_ch * ratio), 3, stride, 1)),
-                nn.LeakyReLU(0.2, inplace=True)
+                nn.LeakyReLU(0.2, inplace=False), #True)
             ])
             cur_ch = int(cur_ch * ratio)
         

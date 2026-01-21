@@ -6,7 +6,7 @@ pretrained_model_name_or_path: black-forest-labs/FLUX.1-dev
 
 # log & save & checkpoint
 checkpoint_step: 5000
-visualization_step:  2000
+visualization_step:  20
 log_step: 10
 
 # training
@@ -35,7 +35,7 @@ gaussian_decoder:
 
 # optimizer
 use_8bit_adam: False
-learning_rate: 3e-04
+learning_rate: 1e-04
 adam_betas: [0.9, 0.999]
 adam_weight_decay: 0.
 adam_epsilon: 1e-08
