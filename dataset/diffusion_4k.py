@@ -39,7 +39,7 @@ class Diffusion4KDataset(Dataset):
                     T.CenterCrop(self.size),
                     T.RandomHorizontalFlip(p=0.5),
                     T.ToTensor(),
-                    T.Normalize([0.5], [0.5]),
+                    # T.Normalize([0.5], [0.5]),
                 ]
             )
         else:
@@ -49,17 +49,15 @@ class Diffusion4KDataset(Dataset):
                     T.RandomCrop(self.size),
                     T.RandomHorizontalFlip(p=0.5),
                     T.ToTensor(),
-                    T.Normalize([0.5], [0.5]),
+                    # T.Normalize([0.5], [0.5]),
                 ]
             )
     
-        
-
     def __len__(self):
         return self.len
 
     def __getitem__(self, index):
-        # exit_transpose() throws error on the truncated iamges
+        # exif_transpose() throws error on the truncated iamges
         while True:
             try:
                 data = self.dataset[index]

@@ -35,7 +35,7 @@ from dinov3_gan.dinov3_convnext_disc import Dinov3ConvNeXtDiscriminator
 from dataset import Diffusion4KDataset
 from utils.render_utils import render_image_from_gaussians
 
-logger = get_logger(__name__)
+# logger = get_logger(__name__)
 
 def load_config():
     parser = argparse.ArgumentParser()
@@ -48,6 +48,24 @@ def load_config():
 
     return config
 
+def create_logger(logging_dir="log", logging_file="log.log"):
+    logger = get_logger(__name__)
+    
+    file_handler = logging.FileHandler(os.path.join(logging_dir, logging_file))
+    logger.addHandler(file_handler)
+
+    formatter = logging.Formatter(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
+
+    for handler in logger.handlers:
+        handler.setFormatter(formatter)
+
+    return logger
+
+
 def main():
     config = load_config()
     
@@ -56,6 +74,8 @@ def main():
     checkpoint_dir = os.path.join(output_dir, "checkpoint")
     visualization_dir = os.path.join(output_dir, "visualization")
 
+    logger = create_logger(logging_dir)
+    
     accelerator_project_config = ProjectConfiguration(
         project_dir=output_dir, logging_dir=logging_dir,
     )
@@ -64,12 +84,7 @@ def main():
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         mixed_precision=config.mixed_precision,
         project_config=accelerator_project_config,
-    )
-
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        log_with="wandb" if config.wandb else None,
     )
     logger.info(accelerator.state, main_process_only=False)
 
@@ -84,6 +99,16 @@ def main():
         
         with open(configs_out, "w+") as f:
             OmegaConf.save(config=config, f=f)
+
+        # code snapshot
+        _temp_code_dir = os.path.join(output_dir, "code_tar")
+        _code_snapshot_path = os.path.join(output_dir, "code_snapshot.tar")
+        os.system(
+            f"rsync --relative -arhvz --quiet --filter=':- .gitignore' --exclude '.git' . '{_temp_code_dir}'"
+        )
+        os.system(f"tar -cf {_code_snapshot_path} {_temp_code_dir}")
+        os.system(f"rm -rf {_temp_code_dir}")
+        logger.info(f"Code snapshot saved to: {_code_snapshot_path}")
 
     # set seed
     set_seed(config.seed + accelerator.process_index)
@@ -267,7 +292,7 @@ def main():
                     block_h=config.block_h, block_w=config.block_w,
                 ).to(weight_dtype)
 
-                # # update gaussian decoder weights
+                # update gaussian decoder weights
                 loss_l1 = F.l1_loss(image_render, image_target) * lambda_l1
                 loss_dv3d = net_dv3d(image_render, image_target) * lambda_dv3d
                 loss_gan = net_disc(image_render, for_G=True) * lambda_gan
@@ -360,10 +385,16 @@ def main():
                         )
 
                     logs = {
-                        "gs_loss": total_loss_G.detach().item(),
-                        "disc_loss": total_loss_D.detach().item(),
+                        "Total_loss_G": total_loss_G.detach().item(),
+                        "L1_loss": loss_l1.detach().item(),
+                        "DV3D_loss": loss_dv3d.detach().item(),
+                        "GAN_loss": loss_gan.detach().item(),
+                        "Total_loss_D": total_loss_D.detach().item(),
+                        "D_fake_loss": loss_D_fake.detach().item(),
+                        "D_real_loss":loss_D_real.detach().item(),
                     }
                     progress_bar.set_postfix(**logs)
+                    accelerator.log(logs, step=global_step)
                 
                 accelerator.wait_for_everyone()
             

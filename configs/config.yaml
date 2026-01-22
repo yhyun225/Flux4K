@@ -1,4 +1,5 @@
 output_dir: output
+wandb: True
 
 seed: 0
 # pretrained_model_name_or_path: black-forest-labs/FLUX.1-Krea-dev
