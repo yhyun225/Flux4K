@@ -26,6 +26,7 @@ def render_image_from_gaussians(
     scale = gaussians["scale"].float() * upscale_factor
     color = gaussians["color"].float()
 
+    render_images = []
     for i in range(offset.shape[0]):
         # image grid: centroid coordinates of each pixels in h x w image (normalized to [0, 1])
         ys, xs = torch.meshgrid(
@@ -65,7 +66,6 @@ def render_image_from_gaussians(
             block_h,
             block_w
         )
+        render_images.append(render_image.permute(2, 0, 1))
 
-    render_image = render_image.unsqueeze(0).permute(0, 3, 1, 2)    # [b, c, h, w]
-
-    return render_image
+    return torch.stack(render_images, dim=0)

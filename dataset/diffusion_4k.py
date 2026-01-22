@@ -39,7 +39,7 @@ class Diffusion4KDataset(Dataset):
                     T.CenterCrop(self.size),
                     T.RandomHorizontalFlip(p=0.5),
                     T.ToTensor(),
-                    # T.Normalize([0.5], [0.5]),
+                    T.Normalize([0.5], [0.5]),
                 ]
             )
         else:
@@ -49,7 +49,7 @@ class Diffusion4KDataset(Dataset):
                     T.RandomCrop(self.size),
                     T.RandomHorizontalFlip(p=0.5),
                     T.ToTensor(),
-                    # T.Normalize([0.5], [0.5]),
+                    T.Normalize([0.5], [0.5]),
                 ]
             )
     

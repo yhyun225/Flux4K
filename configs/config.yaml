@@ -1,13 +1,13 @@
 output_dir: output
 wandb: True
 
-seed: 0
+seed: 1
 # pretrained_model_name_or_path: black-forest-labs/FLUX.1-Krea-dev
 pretrained_model_name_or_path: black-forest-labs/FLUX.1-dev
 
 # log & save & checkpoint
-checkpoint_step: 5000
-visualization_step:  20
+checkpoint_step: 1000
+visualization_step:  100
 log_step: 10
 
 # training
@@ -32,7 +32,7 @@ block_w: 16
 gaussian_decoder:
   train_size: [1024, 1024]
   split_dim: [2, 1, 2, 3]
-  num_gaussians_per_pixel: 1
+  num_gaussians_per_pixel: 2
 
 # optimizer
 use_8bit_adam: False
@@ -49,7 +49,7 @@ lambda_gan: 0.5
 
 # dataset
 dataset:
-  data_root: /data1/yhyun225/Diffusion4K
+  data_root: data/diffusion_4k/
   size: [4096, 4096]
   center_crop: False
 

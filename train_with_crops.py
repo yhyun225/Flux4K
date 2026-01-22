@@ -67,7 +67,11 @@ def main():
         project_config=accelerator_project_config,
     )
 
-    
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
     logger.info(accelerator.state, main_process_only=False)
 
     if accelerator.is_main_process:
@@ -179,8 +183,8 @@ def main():
     )
 
     if accelerator.is_main_process:
-        print(f"Gaussian Decoder # parpams: {sum([p.numel() for p in model.parameters() if p.requires_grad])}")
-        print(f"Deiscriminator # parpams: {sum([p.numel() for p in net_disc.parameters() if p.requires_grad])}")
+        logger.info(f"Gaussian Decoder # parpams: {sum([p.numel() for p in model.parameters() if p.requires_grad])}")
+        logger.info(f"Deiscriminator # parpams: {sum([p.numel() for p in net_disc.parameters() if p.requires_grad])}")
 
     # ====================== compute batch size ======================
     assert config.batch_size is not None or config.batch_size_per_gpu is not None, \
@@ -274,12 +278,13 @@ def main():
                     block_h=config.block_h, block_w=config.block_w,
                 ).to(weight_dtype)
                 
-                # second gaussians -> 4k image + diff 4k
+                # second gaussians -> diff 4k
                 image_render_4k = render_image_from_gaussians(
                     gaussians[0], 1024, 1024,
                     render_h=4096, render_w=4096,
                     block_h=config.block_h, block_w=config.block_w,
                 ).to(weight_dtype)
+
                 diff_4k = render_image_from_gaussians(
                     gaussians[1], 1024, 1024,
                     render_h=4096, render_w=4096,
@@ -290,7 +295,7 @@ def main():
 
                 # random crops from 4k images
                 target_crops, render_crops = random_crop_from_images(
-                    image, image_render_hq_4k, crop_size=(1024, 1024), num_crops=1
+                    image, image_render_hq_4k, crop_size=(1024, 1024), num_crops=3
                 )
                 
                 # pred & target
@@ -350,36 +355,48 @@ def main():
                         os.makedirs(train_images_dir, exist_ok=True)
 
                         # TODO: save image_resize & image_render
-                        for i in range(image_target.shape[0]):
+                        for i in range(image_1k.shape[0]):
+                            # rendering on 1k
                             torchvision.utils.save_image(
                                 torch.clamp((image_render_1k[i: i+1] + 1) / 2, 0, 1),
                                 os.path.join(train_images_dir, f"render_{i}.png")
                             )
                             torchvision.utils.save_image(
-                                torch.clamp((image_target[i: i+1] + 1) / 2, 0, 1),
+                                torch.clamp((image_1k[i: i+1] + 1) / 2, 0, 1),
                                 os.path.join(train_images_dir, f"target_{i}.png")
                             )
-
-                        # TODO: rendering on 4k
-                        with torch.no_grad():
+                        
+                        for i in range(target_crops.shape[0]):
+                            # 1k crops from 4k image
                             torchvision.utils.save_image(
-                                torch.clamp((image_render_4k + 1) / 2, 0, 1),
+                                torch.clamp((render_crops[i: i+1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"render_crops_{i}.png")
+                            )
+                            torchvision.utils.save_image(
+                                torch.clamp((target_crops[i: i+1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"target_crops_{i}.png")
+                            )
+                        
+                        for i in range(image_render_4k.shape[0]):
+                            # rendering on 4k
+                            torchvision.utils.save_image(
+                                torch.clamp((image_render_4k[i: i + 1] + 1) / 2, 0, 1),
                                 os.path.join(train_images_dir, f"render_4k_{i}.png")
                             )
 
                             torchvision.utils.save_image(
-                                torch.clamp((diff_4k + 1) / 2, 0, 1),
+                                torch.clamp((diff_4k[i: i + 1] + 1) / 2, 0, 1),
                                 os.path.join(train_images_dir, f"diff_4k_{i}.png")
                             )
 
-                            image_render_4k = render_image_from_gaussians(
-                                gaussians[0], 1024, 1024,
-                                render_h=4096, render_w=4096,
-                                block_h=config.block_h, block_w=config.block_w
-                            )
                             torchvision.utils.save_image(
-                                torch.clamp((image_render_4k + 1) / 2, 0, 1),
-                                os.path.join(train_images_dir, f"render_4k_{i}.png")
+                                torch.clamp((image_render_hq_4k[i: i + 1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"render_4k_hq_{i}.png")
+                            )
+
+                            torchvision.utils.save_image(
+                                torch.clamp((image[i: i + 1] + 1) / 2, 0, 1),
+                                os.path.join(train_images_dir, f"image_4k_{i}.png")
                             )
 
                         
