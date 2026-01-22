@@ -5,3 +5,6 @@ __pycache__/
 output/
 output*/
 data/
+
+*.png
+*.jpg
